@@ -1,2 +1,2 @@
 # dbchk
-A generic script to run in an oracle environment to get a sense of how the database is setup and any issues.
+This script is helpful to assess new clients. To see how their environment is setup, potential security issues, performance issues and to develop an initial action plan.
