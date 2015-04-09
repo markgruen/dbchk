@@ -34,20 +34,24 @@ $Header: http://mysvn/svn/DBA/trunk/sql/dbchk.sql 197 2013-12-26 15:25:28Z  $
 
  Add check for indexes on fk columns
 
- Copyright (C) 2014 Mark Gruenberg
+The MIT License (MIT)
+Copyright (c) 2015 Mark Gruenberg
 
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
- 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- 
- You should have received a copy of the GNU General Public License
- along with this program.  If not, see <http://www.gnu.org/licenses/>.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 * ------------------------------------------------------------------------------ */
 set lines 500
@@ -66,10 +70,12 @@ select HOST_NAME into :host from v$instance;
 end;
 /
 
+col system_title new_value system_title
 col spoolname new_value spoolname
 col undospoolname new_value undospoolname
 col undosqlspoolname new_value undosqlspoolname
 
+select :instance||'@'||:host system_title from dual;
 select 'dbchk_'||:instance||'_'||:host||'.log' spoolname from dual;
 select 'dbchk_undo_hist_'||:instance||'_'||:host||'.log' undospoolname from dual;
 select 'dbchk_undo_sql_hist_'||:instance||'_'||:host||'.log' undosqlspoolname from dual;
@@ -80,9 +86,11 @@ select wrl_parameter wallet_path from  gv$encryption_wallet;
 spo '&spoolname'
 
 --db information
-prompt --DB Information
-prompt --  Script by Mark Gruenberg
-prompt --  Copyright (C) 2014 Mark Gruenberg
+prompt --DB Information for &system_title
+prompt --   Script by Mark Gruenberg
+prompt -- The MIT License (MIT)
+prompt -- Copyright (c) 2015 Mark Gruenberg
+
 col instance_name for a10
 col protection_mode for a25
 col db_unique_name for a10
@@ -127,7 +135,7 @@ col DESTINATION for a60
 col error for a60
 
 select DEST_NAME, DESTINATION, status, error from  v$archive_dest_status
-order by status,error,DEST_NAME;
+order by destination,status,error,DEST_NAME;
 
 prompt -- Option Usage
 col name for a60
@@ -145,6 +153,10 @@ select comp_id, comp_name, version, status from dba_registry
 ;
 
 spo off
+
+!echo "" | tee -a '&spoolname'
+!echo "-- Configured Instances (from oratab)" | tee -a '&spoolname'
+!cat /etc/oratab | python2.7 instance_status.py | tee -a '&spoolname'
 
 !echo "" | tee -a '&spoolname'
 !echo "-- Unix kernal UNAME" | tee -a '&spoolname'
@@ -518,8 +530,21 @@ from dba_objects a
 group by rollup(a.owner)
 ;
 
--- index counts
-prompt --Index Counts
+-- Indexes
+prompt --Indexes
+prompt --Big Tables without indexes (>2M)
+
+select t.owner, t.table_name, s.bytes/(1024*1024) MBytes
+from dba_tables t 
+left outer join dba_indexes i 
+  on (t.owner=i.table_owner and t.table_name=i.table_name)
+inner join dba_segments s
+  on (t.table_name=s.segment_name and t.owner=s.owner)
+where i.table_name is null
+and s.bytes>2097152
+order by s.bytes desc;
+
+prompt --Index Counts (>8 indexes)
 
 col index_type for a25
 
@@ -537,26 +562,16 @@ where
 )
 select table_owner,table_name,index_type,num_indexes num_indx_by_type,total_indexes 
 from indexes 
+where total_indexes>8
 group by table_owner,table_name,index_type,num_indexes,total_indexes
 order by table_owner,total_indexes desc, table_name,index_type
 ;
 
 -- segments extents
-prompt --Segment Extents
+prompt --Segment Extents Summary
 
 col segment_name for a30
 col owner for a20
-
-select OWNER, segment_name,PARTITION_NAME,tablespace_name,extents,bytes/(1024*1024) mbytes 
-from dba_segments 
-where owner not in
-('ANONYMOUS', 'APPQOSSYS', 'CTXSYS', 'DBSNMP','DIP', 'EXFSYS', 'MGMT_VIEW', 'OLAPSYS',
-'ORACLE_OCM', 'OUTLN', 'SYS', 'SYSMAN','SYSTEM', 'WMSYS', 'XDB', 'XS$NULL') 
-and extents>10 
-order by extents desc
-;
-
-prompt --Segment Extents Summary
 
 with extents as
 (
@@ -575,6 +590,18 @@ where owner not in
   'ORACLE_OCM', 'OUTLN', 'SYS', 'SYSMAN','SYSTEM', 'WMSYS', 'XDB', 'XS$NULL') 
 group by owner
 ;
+
+prompt --Segment Extents (>10 extents)
+
+select OWNER, segment_name,PARTITION_NAME,tablespace_name,extents,bytes/(1024*1024) mbytes 
+from dba_segments 
+where owner not in
+('ANONYMOUS', 'APPQOSSYS', 'CTXSYS', 'DBSNMP','DIP', 'EXFSYS', 'MGMT_VIEW', 'OLAPSYS',
+'ORACLE_OCM', 'OUTLN', 'SYS', 'SYSMAN','SYSTEM', 'WMSYS', 'XDB', 'XS$NULL') 
+and extents>10 
+order by extents desc, bytes desc
+;
+
 
 prompt -- Database backup summary
 col input_bytes_display for a10
@@ -672,8 +699,8 @@ spo off
 set echo off
 set heading off
 spo ttschk.sql
-prompt --  Script by Mark Gruenberg
-prompt --  Copyright (C) 2014 Mark Gruenberg
+prompt -- The MIT License (MIT)
+prompt -- Copyright (c) 2015 Mark Gruenberg
 --tts dependencies
 select 'exec sys.DBMS_TTS.TRANSPORT_SET_CHECK('''||wm_concat(name)||''');' from v$tablespace where name not in ('SYSTEM','SYSAUX','TEMP') and name not like 'UNDO%';
 spo off
@@ -704,6 +731,9 @@ prompt --Max Query Length in period in Mins
 
 --spo dbchk_undo_hist_sql.log
 spo '&undosqlspoolname'
+prompt --UNDO Information for &system_title
+prompt -- The MIT License (MIT)
+prompt -- Copyright (c) 2015 Mark Gruenberg
 set lines 10000
 set pages 50000 
 col  MAXQUERYLEN_MIN head 'Max Query |Len (Min)'
@@ -727,6 +757,7 @@ prompt --UNDO Stats History
 
 spo '&undospoolname'
 --spo dbchk_undo_hist.log
+prompt --UNDO Information for &system_title
 prompt --  Script by Mark Gruenberg
 prompt --  Copyright (C) 2014 Mark Gruenberg
 
@@ -774,8 +805,8 @@ select * FROM sys.transport_set_violations;
 prompt -- Sessions Last 10 Wait Events
 col sid for 9999
 col seq# for 999
-col username for a15
-col osuser for a15
+col db_user for a15
+col osuser_host for a25
 col machine for a25
 col event for a58
 col p1text for a20
@@ -785,7 +816,7 @@ col time_since_last_wait_micro heading 'time_since|last_wait|mico'
 
 select to_char(sysdate,'MM/DD/YYYY HH24:MI:SS') run_date from dual;
 
-select sid,sh.seq#,username,osuser,machine,type,sh.event,sh.p1text,sh.p1,sh.p2text,sh.p2,sh.p3text,sh.p3,
+select sid,sh.seq#,username db_user,osuser||'@'||machine osuser_host,type,sh.event,sh.p1text,sh.p1,sh.p2text,sh.p2,sh.p3text,sh.p3,
 sh.wait_time, sh.time_since_last_wait_micro
 from v$session s inner join v$session_wait_history sh using (sid)
 order by type desc,sid,sh.wait_time desc
