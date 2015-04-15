@@ -1,9 +1,9 @@
 /* 
 -------------------------------------------------------------------------------
 $Header: http://mysvn/svn/DBA/trunk/sql/dbchk.sql 197 2013-12-26 15:25:28Z  $                                              
- Revision of last commit: $Rev: 413 $
+ Revision of last commit: $Rev: 425 $
  Author of last commit:   $Author: mgruen $
- Date of last commit:     $Date: 2015-03-10 18:50:03 -0400 (Tue, 10 Mar 2015) $
+ Date of last commit:     $Date: 2015-04-15 11:47:59 -0400 (Wed, 15 Apr 2015) $
 -------------------------------------------------------------------------------
  
  Check db script
@@ -241,6 +241,33 @@ with
 select instances, temp_files
 from instance_count cross join tempfile_count
 ;
+
+prompt -- Services
+prompt --   removed SYS$ default services from output
+col name for a20
+col failover_method for a15
+col failover_type for a15
+col running_on for a30
+
+with instances as 
+(
+  select inst_id, instance_name||':'||host_name inst_name, d.name db_name
+  from gv$instance i 
+  inner join gv$database d
+    using (inst_id)
+)
+select 
+  s.name, s.goal, s.clb_goal, s.failover_method, s.failover_type, s.failover_retries, s.enabled, nvl(i.inst_name, 'NOT RUNNING') running_on, i.db_name, service_id
+from dba_services s 
+left outer join gv$active_services a
+  using (service_id)
+left outer join instances i
+  on (a.inst_id=i.inst_id)
+where 
+s.name not like 'SYS$%' 
+--and upper(s.name) <> upper(i.db_name||'XDB')
+--and upper(s.name) <> upper(i.db_name)
+order by service_id;
 
 
 -- db wallet parameters
@@ -507,6 +534,8 @@ col policy_text for a60
 select * from DBA_AUDIT_POLICIES;
 
 prompt -- object policies
+col owner for a30
+col object_name for a40
 select * from dba_obj_audit_opts;
 
 prompt -- privilege policies
