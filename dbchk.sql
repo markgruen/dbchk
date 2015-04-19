@@ -1,9 +1,9 @@
 /* 
 -------------------------------------------------------------------------------
 $Header: http://mysvn/svn/DBA/trunk/sql/dbchk.sql 197 2013-12-26 15:25:28Z  $                                              
- Revision of last commit: $Rev: 425 $
+ Revision of last commit: $Rev: 427 $
  Author of last commit:   $Author: mgruen $
- Date of last commit:     $Date: 2015-04-15 11:47:59 -0400 (Wed, 15 Apr 2015) $
+ Date of last commit:     $Date: 2015-04-19 08:32:28 -0700 (Sun, 19 Apr 2015) $
 -------------------------------------------------------------------------------
  
  Check db script
@@ -177,6 +177,43 @@ spo off
 !echo "" | tee -a '&spoolname'
 !echo "-- File System Usage" | tee -a '&spoolname'
 !df -k | tee -a '&spoolname'
+
+!echo "" | tee -a '&spoolname'
+!echo "-- Checking for Transparent Hugepage - This should be disabled" | tee -a '&spoolname'
+!cat /sys/kernel/mm/*transparent_hugepage/enabled || echo 'not available' | tee -a '&spoolname'
+
+!echo "" | tee -a '&spoolname'
+!echo "-- Checking kernel parameteres for hugepages" | tee -a '&spoolname'
+!sysctl vm.nr_hugepages | tee -a '&spoolname'
+
+!echo "" | tee -a '&spoolname'
+!echo "-- Checking for available hugepages" | tee -a '&spoolname'
+!grep Huge /proc/meminfo | tee -a '&spoolname'
+
+!echo ""                                                                                | tee -a '&spoolname'
+!echo "-- Checking networking kernel parameters"                                        | tee -a '&spoolname'
+!sysctl -a | grep -E  'rmem_default|rmem_max|wmem_default|wmem_max|ip_local_port_range' | tee -a '&spoolname'
+!echo ""                                                                                | tee -a '&spoolname'
+!echo "-- For RAC its recommended if you have plenty memory and inner connect usage is "   | tee -a '&spoolname'
+!echo "-- high then set:"                                                                  | tee -a '&spoolname'
+!echo "-- "                                                                                | tee -a '&spoolname'
+!echo "-- rmem_default = 4M"                                                               | tee -a '&spoolname'
+!echo "-- wmem_default = 4M"                                                               | tee -a '&spoolname'
+!echo "-- "                                                                                | tee -a '&spoolname'
+!echo "-- rmem_max = 8M"                                                                   | tee -a '&spoolname'
+!echo "-- wmem_max = 8M"                                                                   | tee -a '&spoolname'
+
+
+!echo ""                                                                             | tee -a '&spoolname'
+!echo "-- Checking networking kernel parameters for fragmentation and reassembly"    | tee -a '&spoolname'
+!sysctl net.ipv4.ipfrag_low_thresh net.ipv4.ipfrag_high_thresh net.ipv4.ipfrag_time  | tee -a '&spoolname'
+!echo ""                                                                             | tee -a '&spoolname'
+!echo "-- ipfrag_low_thresh and ipfrag_high _thresh are the upper and lower bounds"     | tee -a '&spoolname'
+!echo "-- for buffer used to reassemble packets. If this is too small it can "          | tee -a '&spoolname'
+!echo "-- lead to dropped packets on the inner connect"                                 | tee -a '&spoolname'
+!echo "-- "                                                                             | tee -a '&spoolname'
+!echo "-- ipfrag_time is the duration allowed to reassemble packets if it takes "       | tee -a '&spoolname'
+!echo "-- longer then this time the packet is dropped"                                  | tee -a '&spoolname'
 
 !echo "" | tee -a '&spoolname'
 spo '&spoolname' append
